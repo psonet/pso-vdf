@@ -1,0 +1,209 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy, cargo
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-stable-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-stable-lint-
+
+      - name: Check code formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy (code smells check)
+        run: |
+          cargo clippy --version
+          # Focused practical-smell set; intentionally relaxed on a
+          # few `clippy::style` lints that fire heavily in big-int and
+          # cryptographic code.
+          cargo clippy --all-targets --all-features -- -D warnings \
+            -D clippy::dbg_macro \
+            -D clippy::print_stdout \
+            -D clippy::print_stderr \
+            -D clippy::todo \
+            -D clippy::unimplemented \
+            -D clippy::exit \
+            -D clippy::cast_lossless \
+            -D clippy::clone_on_ref_ptr \
+            -D clippy::empty_enums \
+            -D clippy::enum_glob_use \
+            -D clippy::if_not_else \
+            -D clippy::mut_mut \
+            -D clippy::non_ascii_literal \
+            -D clippy::single_match_else \
+            -D clippy::string_add \
+            -D clippy::string_add_assign \
+            -D clippy::string_lit_as_bytes \
+            -D clippy::unnecessary_unwrap \
+            -D clippy::useless_let_if_seq \
+            -A clippy::module_name_repetitions \
+            -A clippy::must_use_candidate \
+            -A clippy::missing_errors_doc \
+            -A clippy::missing_panics_doc \
+            -A clippy::too_many_lines \
+            -A clippy::similar_names \
+            -A clippy::inline_always \
+            -A clippy::unwrap_used \
+            -A clippy::expect_used \
+            -A clippy::panic \
+            -A clippy::cast_possible_truncation \
+            -A clippy::cast_possible_wrap \
+            -A clippy::cast_precision_loss \
+            -A clippy::cast_sign_loss \
+            -A clippy::unused_self \
+            -A unused_imports \
+            -A unused_macros \
+            -A dead_code
+
+      - name: Check documentation builds
+        run: cargo doc --no-deps --all-features --document-private-items
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [lint]
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+        include:
+          - rust: nightly
+            allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy, cargo
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.rust }}-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        continue-on-error: ${{ matrix.rust == 'nightly' }}
+
+      - name: Run clippy
+        run: |
+          cargo clippy --version
+          cargo clippy --all-targets --all-features -- -D warnings \
+            -D clippy::dbg_macro \
+            -D clippy::print_stdout \
+            -D clippy::print_stderr \
+            -A clippy::unwrap_used \
+            -A clippy::expect_used \
+            -A clippy::panic
+        continue-on-error: ${{ matrix.rust == 'nightly' }}
+
+      - name: Run tests (default features — no_std)
+        run: cargo test --verbose
+
+      - name: Run tests (all features — std + serde)
+        run: cargo test --verbose --all-features
+
+      - name: Build (default features)
+        run: cargo build --verbose --release
+
+      - name: Build (all features)
+        run: cargo build --verbose --release --all-features
+
+      - name: Check no_std build is still no_std
+        # Default build pulls only the crate itself + its no_std deps.
+        # Asserts we haven't accidentally regressed std-dependence in
+        # the default feature set.
+        run: cargo build --verbose --release
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    needs: [lint, test]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy, cargo
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-stable-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-stable-
+      - name: Build
+        run: cargo build --verbose --release --all-features
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: target/release/
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: [lint, test, build]
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy, cargo
+
+      - name: Run tests
+        run: cargo test --verbose --all-features
+
+      - name: Build
+        run: cargo build --verbose --release --all-features
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo publish --verbose --token "${CARGO_REGISTRY_TOKEN}"

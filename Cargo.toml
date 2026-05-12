@@ -1,0 +1,44 @@
+[package]
+name        = "pso-vdf"
+version     = "0.1.0"
+edition     = "2021"
+authors     = ["PSO Lab"]
+license     = "MIT"
+repository  = "https://github.com/psonet/pso-vdf"
+description = "no_std Verifiable Delay Function: MinRoot over BLS12-381 with Wesolowski O(1) verify"
+readme      = "README.md"
+keywords    = ["vdf", "minroot", "wesolowski", "bls12-381", "no-std"]
+categories  = ["cryptography", "no-std"]
+
+# no_std by default; opt-in `std` feature pulls in host-only deps
+# (formatted errors via `thiserror/std`, allocation-aware `ark-*/std`).
+[features]
+default = []
+std     = [
+    "ark-ff/std",
+    "ark-bls12-381/std",
+    "ark-serialize/std",
+    "sha2/std",
+    "thiserror/std",
+]
+# Opt-in serde derives for the wire types (`VdfOutput`, `VdfProof`).
+# `serde/alloc` is required because `VdfOutput` / `VdfProof` wrap `Vec<u8>`;
+# the crate uses `extern crate alloc` even without `std`, so serde's
+# alloc-feature gives us `Serialize` / `Deserialize` impls for `Vec`
+# without forcing the host `std` feature on consumers.
+serde   = ["dep:serde", "serde/alloc"]
+
+[dependencies]
+ark-bls12-381 = { version = "0.5", default-features = false, features = ["curve"] }
+ark-ff        = { version = "0.5", default-features = false }
+ark-serialize = { version = "0.5", default-features = false }
+sha2          = { version = "0.10", default-features = false }
+thiserror     = { version = "2", default-features = false }
+serde         = { version = "1", default-features = false, features = ["derive"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name    = "vdf_bench"
+harness = false

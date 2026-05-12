@@ -1,0 +1,8 @@
+# Act configuration file
+# Use a more complete Docker image that includes curl and other tools
+-P ubuntu-latest=catthehacker/ubuntu:act-22.04
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+
+# Increase memory limit
+--container-options "--memory=4gb"

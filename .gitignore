@@ -1,0 +1,6 @@
+/target
+Cargo.lock
+/.idea
+.serena
+.claude/settings.local.json
+.DS_Store
