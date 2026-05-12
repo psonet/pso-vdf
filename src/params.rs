@@ -16,16 +16,15 @@ use crate::types::{VdfDifficulty, VdfInput};
 /// rejects with `BadVdfInputBinding`.
 ///
 /// Why these four fields:
-///   * `signer`           — ties the proof to a specific account; one wallet
-///                          can't reuse another's proof.
-///   * `nonce`            — ties the proof to a specific tx slot for the
-///                          signer; can't be reused across txs from the
-///                          same account.
-///   * `submitted_block`  — ties the proof to a specific block window; can't
-///                          be stockpiled across blocks (combined with the
-///                          backward-looking validity window).
-///   * `chain_id`         — chain-specific; proof for chain A can't be
-///                          replayed on chain B.
+///   * `signer` — ties the proof to a specific account; one wallet
+///     can't reuse another's proof.
+///   * `nonce` — ties the proof to a specific tx slot for the
+///     signer; can't be reused across txs from the same account.
+///   * `submitted_block` — ties the proof to a specific block window;
+///     can't be stockpiled across blocks (combined with the
+///     backward-looking validity window).
+///   * `chain_id` — chain-specific; proof for chain A can't be
+///     replayed on chain B.
 ///
 /// We deliberately do **not** include `tx_hash` — it would create a circular
 /// dependency (tx_hash covers calldata, which contains `vdf_input`). The
@@ -57,7 +56,13 @@ impl VdfParams {
         chain_id: u64,
         difficulty: VdfDifficulty,
     ) -> Self {
-        Self { signer, nonce, submitted_block, chain_id, difficulty }
+        Self {
+            signer,
+            nonce,
+            submitted_block,
+            chain_id,
+            difficulty,
+        }
     }
 
     /// Derive the canonical 32-byte VDF input.
@@ -94,13 +99,8 @@ impl VdfParams {
     /// Accept iff `submitted_block ≤ current_block` and
     /// `current_block - submitted_block ≤ window` (see `PROOF_VALIDITY_WINDOW`
     /// in lib.rs, REQ-VDF-05).
-    pub fn is_block_valid(
-        submitted_block: u64,
-        current_block: u64,
-        window: u64,
-    ) -> bool {
-        submitted_block <= current_block
-            && current_block - submitted_block <= window
+    pub fn is_block_valid(submitted_block: u64, current_block: u64, window: u64) -> bool {
+        submitted_block <= current_block && current_block - submitted_block <= window
     }
 }
 
@@ -139,7 +139,7 @@ mod tests {
     fn block_validity_window() {
         // current_block=100, window=32 — accept submitted_block ∈ [68, 100]
         assert!(VdfParams::is_block_valid(100, 100, 32)); // delta=0
-        assert!(VdfParams::is_block_valid(68, 100, 32));  // delta=32 (boundary)
+        assert!(VdfParams::is_block_valid(68, 100, 32)); // delta=32 (boundary)
         assert!(!VdfParams::is_block_valid(67, 100, 32)); // delta=33, too old
         assert!(!VdfParams::is_block_valid(101, 100, 32)); // future block
     }

@@ -59,7 +59,9 @@ impl MinRootProof {
     /// Deserialise from raw bytes.
     pub fn from_bytes(b: Vec<u8>) -> Result<Self, VdfError> {
         if b.is_empty() {
-            return Err(VdfError::MalformedProof { reason: "empty proof bytes" });
+            return Err(VdfError::MalformedProof {
+                reason: "empty proof bytes",
+            });
         }
         Ok(Self { inner: b })
     }
@@ -162,11 +164,11 @@ impl Vdf for MinRootVdf {
         // E = q*l + r
         let (_q, r) = divmod_by_u128(e_big, l);
 
-        // Check: π^l · x^r == y
+        // Check: pi^l * x^r == y
         let l_limbs = [l as u64, (l >> 64) as u64];
         let r_limbs = [r as u64, (r >> 64) as u64];
-        let pi_l = pi.pow(&l_limbs);
-        let x_r = x.pow(&r_limbs);
+        let pi_l = pi.pow(l_limbs);
+        let x_r = x.pow(r_limbs);
 
         pi_l * x_r == y
     }
@@ -216,19 +218,19 @@ fn compute_inv5_exponent() -> <Fq as PrimeField>::BigInt {
     // We work in 7 limbs to handle potential overflow (4p can be up to 383 bits).
     let mut four_p = [0u64; 7];
     let mut carry = 0u128;
-    for i in 0..6 {
-        let wide = (p.0[i] as u128) * 4 + carry;
-        four_p[i] = wide as u64;
+    for (i, limb) in four_p.iter_mut().enumerate().take(6) {
+        let wide = u128::from(p.0[i]) * 4 + carry;
+        *limb = wide as u64;
         carry = wide >> 64;
     }
     four_p[6] = carry as u64;
 
-    // Step 2: subtract 3 → (4p - 3)
+    // Step 2: subtract 3 -> (4p - 3)
     let mut borrow = 3u64;
-    for limb in four_p.iter_mut() {
+    for limb in &mut four_p {
         let (val, b) = limb.overflowing_sub(borrow);
         *limb = val;
-        borrow = b as u64;
+        borrow = u64::from(b);
         if borrow == 0 {
             break;
         }
@@ -238,7 +240,7 @@ fn compute_inv5_exponent() -> <Fq as PrimeField>::BigInt {
     let mut result = [0u64; 7];
     let mut remainder = 0u128;
     for i in (0..7).rev() {
-        let dividend = (remainder << 64) | (four_p[i] as u128);
+        let dividend = (remainder << 64) | u128::from(four_p[i]);
         result[i] = (dividend / 5) as u64;
         remainder = dividend % 5;
     }
@@ -246,7 +248,9 @@ fn compute_inv5_exponent() -> <Fq as PrimeField>::BigInt {
     // The result fits in 6 limbs because e < p.
     debug_assert_eq!(result[6], 0, "inv5 exponent overflows 6 limbs");
 
-    ark_ff::BigInt([result[0], result[1], result[2], result[3], result[4], result[5]])
+    ark_ff::BigInt([
+        result[0], result[1], result[2], result[3], result[4], result[5],
+    ])
 }
 
 /// Perform a single fifth-root iteration: `x → x^e`.
@@ -276,7 +280,10 @@ mod tests {
     #[test]
     fn inv5_exponent_is_nonzero() {
         let e = compute_inv5_exponent();
-        assert!(e.0.iter().any(|&limb| limb != 0), "inv5 exponent must be nonzero");
+        assert!(
+            e.0.iter().any(|&limb| limb != 0),
+            "inv5 exponent must be nonzero"
+        );
     }
 
     #[test]
@@ -285,10 +292,10 @@ mod tests {
         let p = <Fq as PrimeField>::MODULUS;
         let mut rem = 0u128;
         for i in (0..6).rev() {
-            rem = (rem << 64) | (p.0[i] as u128);
+            rem = (rem << 64) | u128::from(p.0[i]);
             rem %= 5;
         }
-        assert_eq!(rem, 2, "BLS12-381 Fq prime must be ≡ 2 (mod 5)");
+        assert_eq!(rem, 2, "BLS12-381 Fq prime must be == 2 (mod 5)");
     }
 
     #[test]
@@ -376,7 +383,9 @@ mod tests {
         let input = VdfInput::from_bytes([0xdeu8; 32]);
         let t = 100u64;
         let (output, _proof) = MinRootVdf::eval(&input, t);
-        let wrong_proof = MinRootProof { inner: vec![0u8; 48] };
+        let wrong_proof = MinRootProof {
+            inner: vec![0u8; 48],
+        };
         assert!(!MinRootVdf::verify(&input, &output, &wrong_proof, t));
     }
 
@@ -399,7 +408,9 @@ mod tests {
     fn verify_zero_difficulty_returns_false() {
         let input = VdfInput::from_bytes([0x01u8; 32]);
         let output = VdfOutput::from_bytes(vec![0u8; 48]);
-        let proof = MinRootProof { inner: vec![0u8; 48] };
+        let proof = MinRootProof {
+            inner: vec![0u8; 48],
+        };
         assert!(!MinRootVdf::verify(&input, &output, &proof, 0));
     }
 
@@ -418,6 +429,10 @@ mod tests {
     fn proof_is_48_bytes() {
         let input = VdfInput::from_bytes([0xabu8; 32]);
         let (_output, proof) = MinRootVdf::eval(&input, 10);
-        assert_eq!(proof.inner.len(), 48, "Wesolowski proof must be 48 bytes (one Fq element)");
+        assert_eq!(
+            proof.inner.len(),
+            48,
+            "Wesolowski proof must be 48 bytes (one Fq element)"
+        );
     }
 }

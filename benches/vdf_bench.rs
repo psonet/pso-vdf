@@ -19,8 +19,8 @@
 //! device (Apple M-series Mac) and apply a ~1.3–1.5x slowdown factor for
 //! sustained mobile workloads (thermal throttling, background restrictions).
 
-use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use std::time::Duration;
 
 use ark_bls12_381::Fq;
@@ -64,15 +64,7 @@ fn bench_single_forward_iteration(c: &mut Criterion) {
 /// - Upper bound (~500k): covers the expected range for 2s on mobile
 ///
 /// After running, look at the results to find T where eval ≈ 2.0s.
-const CALIBRATION_DIFFICULTIES: &[u64] = &[
-    1_000,
-    5_000,
-    10_000,
-    50_000,
-    100_000,
-    200_000,
-    500_000,
-];
+const CALIBRATION_DIFFICULTIES: &[u64] = &[1_000, 5_000, 10_000, 50_000, 100_000, 200_000, 500_000];
 
 fn bench_minroot_eval(c: &mut Criterion) {
     let input = VdfInput::from_bytes([0xabu8; 32]);
@@ -82,13 +74,9 @@ fn bench_minroot_eval(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(30));
 
     for &t in CALIBRATION_DIFFICULTIES {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(t),
-            &t,
-            |b, &difficulty| {
-                b.iter(|| MinRootVdf::eval(black_box(&input), black_box(difficulty)));
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(t), &t, |b, &difficulty| {
+            b.iter(|| MinRootVdf::eval(black_box(&input), black_box(difficulty)));
+        });
     }
 
     group.finish();
@@ -110,11 +98,7 @@ fn bench_forward_verify(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::from_parameter(difficulty), |b| {
         b.iter(|| {
-            minroot::verify_forward(
-                black_box(&input),
-                black_box(&output),
-                black_box(difficulty),
-            )
+            minroot::verify_forward(black_box(&input), black_box(&output), black_box(difficulty))
         });
     });
 
