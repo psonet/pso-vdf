@@ -15,11 +15,22 @@ No trusted setup.
 ```rust
 use pso_vdf::{VdfParams, minroot::MinRootVdf, Vdf};
 
-// 1. Build params from the surrounding context (chain id, block, difficulty).
-let params = VdfParams::new(chain_id, target_block, /* difficulty T = */ 100_000);
+// 1. Build params from the surrounding tx context. `submitted_block`
+//    is the latest block the wallet has observed at the moment it
+//    starts proving — NOT a pre-committed future target. The
+//    validator later checks `current_block - submitted_block` falls
+//    inside `PROOF_VALIDITY_WINDOW`.
+let params = VdfParams::new(
+    signer,           // 20-byte EVM address
+    nonce,            // EVM nonce of the tx this proof binds to
+    submitted_block,  // latest observed block at submission time
+    chain_id,
+    /* difficulty T = */ 100_000,
+);
 
-// 2. Derive the VDF input — binds the proof to this tx_hash + block + chain.
-let input = params.derive_input(&tx_hash);
+// 2. Derive the VDF input — binds the proof to
+//    (signer, nonce, submitted_block, chain_id).
+let input = params.derive_input();
 
 // 3. Evaluate (slow, sequential; ~2 s on iPhone 13 at T = 100_000).
 let (output, proof) = MinRootVdf::eval(&input, params.difficulty);
@@ -79,12 +90,23 @@ sequentiality of iterated exponentiation, not on a hidden trapdoor.
 VDF inputs are bound to transaction context to prevent proof reuse:
 
 ```
-vdf_input = SHA-256(tx_hash || target_block || chain_id)
+vdf_input = SHA-256(signer || nonce_le || submitted_block_le || chain_id_le)
 ```
 
-- **tx_hash**: a proof for one tx can't be reused for another.
-- **target_block**: proofs can't be stockpiled (validity window = ±32 blocks).
+- **signer + nonce**: ties the proof to a specific account + tx slot;
+  one wallet can't reuse another's proof, and the same wallet can't
+  reuse a proof across its own txs.
+- **submitted_block**: the latest block the wallet observed when it
+  started proving. Proofs can't be stockpiled because validity is a
+  backward-only window — the validator accepts iff
+  `current_block - submitted_block` is in `[0, PROOF_VALIDITY_WINDOW]`.
+  Wallets that submit from older blocks just fall outside the window.
 - **chain_id**: proofs can't be replayed across chains.
+
+We deliberately do **not** include `tx_hash` in the binding — that
+would create a circular dependency (the tx hash covers calldata,
+which contains `vdf_input`). The `(signer, nonce)` pair is what the
+EVM already uses to identify a tx slot pre-signing.
 
 ## Module layout
 
@@ -99,13 +121,13 @@ vdf_input = SHA-256(tx_hash || target_block || chain_id)
 
 ## Wire format
 
-| Field            | Size       | Description                                          |
-|------------------|------------|------------------------------------------------------|
-| `vdf_input`      | 32 bytes   | `SHA-256(tx_hash \|\| target_block \|\| chain_id)`   |
-| `vdf_output`     | 48 bytes   | BLS12-381 Fq element (compressed)                    |
-| `vdf_proof`      | 48 bytes   | Wesolowski witness pi (one Fq element)               |
-| `vdf_difficulty` | 8 bytes    | `u64` iteration count T                              |
-| `target_block`   | 8 bytes    | `u64` block number                                   |
+| Field             | Size       | Description                                                                       |
+|-------------------|------------|-----------------------------------------------------------------------------------|
+| `vdf_input`       | 32 bytes   | `SHA-256(signer \|\| nonce_le \|\| submitted_block_le \|\| chain_id_le)`          |
+| `vdf_output`      | 48 bytes   | BLS12-381 Fq element (compressed)                                                 |
+| `vdf_proof`       | 48 bytes   | Wesolowski witness pi (one Fq element)                                            |
+| `vdf_difficulty`  | 8 bytes    | `u64` iteration count T                                                           |
+| `submitted_block` | 8 bytes    | `u64` block number — the latest block the wallet observed at submission time      |
 
 ## Building and testing
 

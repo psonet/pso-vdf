@@ -1,6 +1,6 @@
 //! # pso-vdf
 //!
-//! `no_std`-compatible Verifiable Delay Function primitives for pso-chain.
+//! `no_std`-compatible Verifiable Delay Function primitives.
 //!
 //! ## Algorithm
 //!
@@ -12,17 +12,26 @@
 //! ```rust,ignore
 //! use pso_vdf::{VdfParams, minroot::MinRootVdf, Vdf};
 //!
-//! let params = VdfParams::new(CHAIN_ID, TARGET_BLOCK, DIFFICULTY_T);
-//! let input  = params.derive_input(&tx_hash);
+//! // `submitted_block` is the latest block the wallet has observed
+//! // when proving starts — NOT a pre-committed future target. The
+//! // validator accepts the proof iff
+//! //   `current_block - submitted_block` is in `[0, PROOF_VALIDITY_WINDOW]`.
+//! let params = VdfParams::new(
+//!     signer,           // 20-byte EVM address
+//!     nonce,            // EVM nonce of the tx this proof binds to
+//!     submitted_block,  // latest observed block at submission time
+//!     chain_id,
+//!     difficulty,
+//! );
+//! let input = params.derive_input();
 //! let (output, proof) = MinRootVdf::eval(&input, params.difficulty);
 //! assert!(MinRootVdf::verify(&input, &output, &proof, params.difficulty));
 //! ```
 //!
 //! ## Security note
 //!
-//! The `T_base` constant below is a placeholder. It MUST be calibrated on
-//! reference hardware (Intel Core i5 2020) before testnet deployment.
-//! See OQ-01 and Phase 1 of the roadmap.
+//! The `T_BASE` constant below is a placeholder. It MUST be calibrated
+//! on reference hardware before production deployment.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs, unreachable_pub)]

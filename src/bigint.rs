@@ -121,11 +121,11 @@ mod tests {
         let a = BigInt([1u64, 1, 0, 0, 0, 0]); // 2^64 + 1
         let b = BigInt([3u64, 0, 0, 0, 0, 0]); // 3
         let m = BigInt([5u64, 1, 0, 0, 0, 0]); // 2^64 + 5
-        // a * b = 3 * 2^64 + 3
-        // (3 * 2^64 + 3) mod (2^64 + 5) = 3*(2^64+5) - 15 + 3 = ... let's compute:
-        // 3 * (2^64 + 5) = 3*2^64 + 15
-        // 3*2^64 + 3 - (3*2^64 + 15) = -12 → not right, a*b < 3*m
-        // 3*2^64 + 3 - 2*(2^64 + 5) = 2^64 - 7
+                                               // a * b = 3 * 2^64 + 3
+                                               // (3 * 2^64 + 3) mod (2^64 + 5) = 3*(2^64+5) - 15 + 3 = ... let's compute:
+                                               // 3 * (2^64 + 5) = 3*2^64 + 15
+                                               // 3*2^64 + 3 - (3*2^64 + 15) = -12 → not right, a*b < 3*m
+                                               // 3*2^64 + 3 - 2*(2^64 + 5) = 2^64 - 7
         let expected = BigInt([u64::MAX - 6, 0, 0, 0, 0, 0]); // 2^64 - 7
         let r = mulmod(a, b, &m);
         assert_eq!(r, expected);
@@ -188,14 +188,21 @@ mod tests {
         let val = (1u128 << 64) + 10;
         let expected_q = val / 3;
         let expected_r = val % 3;
-        assert_eq!(q.0[0] as u128, expected_q);
+        assert_eq!(u128::from(q.0[0]), expected_q);
         assert_eq!(r, expected_r);
     }
 
     #[test]
     fn divmod_reconstructs() {
         // For a random-ish BigInt, verify q*d + r == a.
-        let a = BigInt([0xDEAD_BEEF_CAFE_BABEu64, 0x1234_5678_9ABC_DEF0, 0x42, 0, 0, 0]);
+        let a = BigInt([
+            0xDEAD_BEEF_CAFE_BABEu64,
+            0x1234_5678_9ABC_DEF0,
+            0x42,
+            0,
+            0,
+            0,
+        ]);
         let d: u128 = (1u128 << 127) | 17; // large 128-bit divisor
         let (_q, r) = divmod_by_u128(a, d);
 
