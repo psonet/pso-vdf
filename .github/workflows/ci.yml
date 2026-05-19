@@ -7,12 +7,26 @@ on:
     branches: [ main ]
   release:
     types: [ published ]
+  schedule:
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Supply-chain enforcement. Runs on every PR + nightly cron @ 04:00 UTC.
+  # Independent of the rest of the pipeline so a fresh advisory surfacing
+  # nightly is visible without rerunning lint/test.
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check all
+
   lint:
     name: Lint and Format Check
     runs-on: ubuntu-latest
