@@ -1,21 +1,88 @@
 name: CI
 
+# Triggers
+#   push:main         full pipeline incl. cog auto-bump + publish + github-release
+#   push:tags:["v*"]  release-only path; skip lint/test/build, run publish + github-release
+#                     against the named tag
+#   pull_request      lint/test/build/cargo-deny only — no release work
+#   release:published legacy manual path — `publish-manual` re-runs cargo publish.
+#                     Kept during the cog-flow rollout; remove in a follow-up commit
+#                     once the auto-bump path is verified.
+#   schedule          nightly cargo-deny at 04:00 UTC to surface fresh advisories
+#   workflow_dispatch maintainer-named (re-)release; empty `tag` input runs the normal
+#                     main pipeline
+
 on:
   push:
     branches: [ main ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ main ]
   release:
     types: [ published ]
+  schedule:
+    - cron: '0 4 * * *'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Existing tag to (re-)release (e.g. "v0.1.0"). Empty input
+          runs the normal main pipeline.
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # ----------------------------------------------------------------
+  # Mode prelude. Every release-aware job's `if:` reads `release_tag`.
+  # ----------------------------------------------------------------
+  resolve:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.r.outputs.release_tag }}
+    steps:
+      - id: r
+        run: |
+          set -euo pipefail
+          tag=""
+          case "${{ github.event_name }}" in
+            push)
+              if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+                tag="${{ github.ref_name }}"
+              fi
+              ;;
+            workflow_dispatch)
+              tag='${{ inputs.tag }}'
+              ;;
+          esac
+          echo "release_tag=${tag}"
+          echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+
+  # Supply-chain enforcement. Runs on every PR + nightly cron @ 04:00 UTC.
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check all
+
   lint:
     name: Lint and Format Check
     runs-on: ubuntu-latest
+    needs: [resolve]
+    if: needs.resolve.outputs.release_tag == ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -88,7 +155,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [resolve, lint]
+    if: needs.resolve.outputs.release_tag == ''
     strategy:
       matrix:
         rust:
@@ -154,7 +222,8 @@ jobs:
   build:
     name: Build
     runs-on: ${{ matrix.os }}
-    needs: [lint, test]
+    needs: [resolve, lint, test]
+    if: needs.resolve.outputs.release_tag == ''
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -185,11 +254,19 @@ jobs:
           path: target/release/
           if-no-files-found: ignore
 
-  publish:
-    name: Publish to crates.io
+  # ----------------------------------------------------------------
+  # Legacy manual release path. Kept during cog-flow rollout — see
+  # pso-poseidon's identical job for the transition-cost note about
+  # duplicate `cargo publish` attempts on auto-bump runs.
+  # ----------------------------------------------------------------
+  publish-manual:
+    name: Publish to crates.io (manual)
     runs-on: ubuntu-latest
-    needs: [lint, test, build]
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: [resolve, lint, test, build]
+    if: |
+      needs.resolve.outputs.release_tag == '' &&
+      (github.event_name == 'release' ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -207,3 +284,118 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           cargo publish --verbose --token "${CARGO_REGISTRY_TOKEN}"
+
+  # ----------------------------------------------------------------
+  # Version bump + tag. Runs after every check on `push: main`.
+  # ----------------------------------------------------------------
+  tag:
+    name: Bump version & tag
+    runs-on: ubuntu-latest
+    needs: [resolve, lint, test, build]
+    if: |
+      needs.resolve.outputs.release_tag == '' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !startsWith(github.event.head_commit.message, 'chore(version):') &&
+      !contains(github.event.head_commit.message, '[skip ci]')
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Cocogitto bump
+        uses: cocogitto/cocogitto-action@v4
+        with:
+          command: bump
+          args: --auto
+          git-user: "github-actions[bot]"
+          git-user-email: "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve created tag (if any)
+        id: bump
+        run: |
+          set -euo pipefail
+          tag="$(git tag --points-at HEAD | grep '^v' | head -n1 || true)"
+          echo "tag=${tag}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+  # ----------------------------------------------------------------
+  # Publish (cog flow).
+  # ----------------------------------------------------------------
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: [resolve, tag]
+    if: |
+      always() &&
+      (
+        (needs.tag.result == 'success' && needs.tag.outputs.tag != '') ||
+        needs.resolve.outputs.release_tag != ''
+      )
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: cargo
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo publish --verbose --token "${CARGO_REGISTRY_TOKEN}"
+
+  # ----------------------------------------------------------------
+  # GitHub release.
+  # ----------------------------------------------------------------
+  github-release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    needs: [resolve, tag, publish]
+    if: |
+      always() &&
+      (
+        (needs.tag.result == 'success' && needs.tag.outputs.tag != '') ||
+        needs.resolve.outputs.release_tag != ''
+      )
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
+
+      - name: Compose release body
+        env:
+          TAG: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Install"
+            echo
+            echo "    cargo add pso-vdf@${TAG#v}"
+            echo
+            echo "## CI"
+            echo
+            echo "- crates.io publish: ${PUBLISH_RESULT}"
+          } > RELEASE_BODY.md
+          cat RELEASE_BODY.md
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
+          name: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
+          body_path: RELEASE_BODY.md
+          generate_release_notes: true
+          fail_on_unmatched_files: false

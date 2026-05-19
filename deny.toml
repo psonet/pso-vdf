@@ -1,0 +1,61 @@
+# cargo-deny configuration.
+#
+# Runs in CI on every PR + nightly at 04:00 UTC. The crate's
+# dependency surface is small and entirely on crates.io, so this
+# template is intentionally strict: no unknown registries, no
+# git deps, no duplicate versions, no wildcard requirements.
+#
+# When a violation surfaces, prefer the upstream fix:
+#   - multiple-versions  -> bump the dep pulling in the older
+#                           one, or add a [patch.crates-io] until
+#                           upstream catches up; only [bans.skip]
+#                           with a rationale if upstream-blocked.
+#   - advisory           -> upgrade the affected crate; only add
+#                           to [advisories.ignore] with the
+#                           RUSTSEC id and a written-out reason.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # paste 1.0.x is unmaintained but still depended on by ark-ff's
+    # proc-macro layer (ark-ff-macros). No safe upgrade exists in
+    # the 0.5.x ark-* line we're pinned against, and ark-* hasn't
+    # cut a release that drops paste. Mirrors the same ignore in
+    # pso-poseidon and pso-zk-circuits. Revisit when ark-* moves
+    # off paste.
+    "RUSTSEC-2024-0436",
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    # `Unicode-3.0` is the current license of `unicode-ident` (pulled
+    # in transitively via every proc-macro crate). `Unicode-DFS-2016`
+    # is the predecessor; we keep both to span old + new releases of
+    # any transitive ark-* / proc-macro crate.
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+deny = []
+skip = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = []
