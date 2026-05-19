@@ -1,5 +1,7 @@
 # pso-vdf
 
+[![crates.io](https://img.shields.io/crates/v/pso-vdf.svg)](https://crates.io/crates/pso-vdf)
+[![release](https://img.shields.io/github/v/release/psonet/pso-vdf.svg)](https://github.com/psonet/pso-vdf/releases)
 [![CI](https://github.com/psonet/pso-vdf/actions/workflows/ci.yml/badge.svg)](https://github.com/psonet/pso-vdf/actions/workflows/ci.yml)
 
 `no_std`-compatible Verifiable Delay Function: **MinRoot** over the
