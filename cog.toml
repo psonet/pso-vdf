@@ -1,0 +1,37 @@
+tag_prefix = "v"
+branch_whitelist = ["main"]
+ignore_merge_commits = true
+generate_mono_repository_global_tag = false
+
+# Rewrite the package's `version` line in Cargo.toml before cog
+# assembles its `chore(version): vX.Y.Z` commit. The `0,/RE/` sed
+# range matches only the FIRST `^version` line, which by Cargo.toml
+# convention is the [package].version (dependency versions are
+# nested inside `{ version = "..." }` tables and don't anchor at
+# column 0). `^version.*` covers any column alignment.
+#
+# pso-vdf is a single-package crate (no [workspace.package]), so
+# this targets [package].version. The padded alignment in the
+# replacement matches pso-vdf's Cargo.toml style.
+#
+# Without this hook cog would tag the release but the crate would
+# still report the old version through Cargo.toml metadata and
+# whatever its CLI surface derives from CARGO_PKG_VERSION — drift
+# between the tag and the artifact's self-reported version.
+pre_bump_hooks = [
+    "sed -i '0,/^version/{s/^version.*/version     = \"{{version}}\"/}' Cargo.toml",
+]
+
+# After cog bumps the version + writes the tag, push both back to
+# the remote so the tag-triggered `publish` + `github-release` jobs
+# in ci.yml can pick the new tag up. The post_bump_hooks also let a
+# maintainer running `cog bump --auto` locally get the same end
+# state.
+post_bump_hooks = [
+    "git push origin HEAD:main",
+    "git push origin v{{version}}",
+]
+
+[changelog]
+path = "CHANGELOG.md"
+authors = []
