@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.1 - 2026-05-20
+#### Bug Fixes
+- (**ci**) attach .crate + SHA256SUMS to GH Releases - (ad570ad) - Anton Velichko
+#### Continuous Integration
+- add commitlint PR check (conventional-commits enforcement) - (17102f3) - Anton Velichko
+- drop legacy publish-manual job now that cog flow is verified - (ec8c1a2) - Anton Velichko
+
+- - -
+
 ## v0.2.0 - 2026-05-19
 #### Features
 - enable cargo-deny enforcement and cog-driven auto-release - (306722c) - Anton Velichko
