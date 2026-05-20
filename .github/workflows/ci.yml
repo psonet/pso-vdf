@@ -328,6 +328,29 @@ jobs:
         run: |
           cargo publish --verbose --token "${CARGO_REGISTRY_TOKEN}"
 
+      # Re-create the .crate locally. `cargo publish` cleans up
+      # target/package/*.crate after a successful upload; `cargo
+      # package --no-verify` is fast (skips the re-build) and
+      # deterministic given the same source tree, so the resulting
+      # bytes match what crates.io just received.
+      - name: Re-package .crate for artifact upload
+        if: success()
+        run: cargo package --no-verify
+
+      # Upload the byte-identical `.crate` as a workflow artifact so
+      # the `github-release` job can attach it to the GH Release
+      # alongside the crates.io copy. Signing in a follow-up commit
+      # will produce one sigstore signature that verifies both the
+      # GH-Release-attached and crates.io copies.
+      - name: Upload .crate as workflow artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crate-tarball
+          path: target/package/*.crate
+          if-no-files-found: error
+          retention-days: 1
+
   # ----------------------------------------------------------------
   # GitHub release.
   # ----------------------------------------------------------------
@@ -348,6 +371,22 @@ jobs:
         with:
           ref: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
 
+      - name: Download .crate artifact
+        if: needs.publish.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: crate-tarball
+          path: dist/
+
+      - name: Generate SHA256SUMS
+        if: needs.publish.result == 'success'
+        run: |
+          set -euo pipefail
+          cd dist
+          shasum -a 256 *.crate > SHA256SUMS
+          echo "---"
+          cat SHA256SUMS
+
       - name: Compose release body
         env:
           TAG: ${{ needs.tag.outputs.tag || needs.resolve.outputs.release_tag }}
@@ -358,6 +397,11 @@ jobs:
             echo "## Install"
             echo
             echo "    cargo add pso-vdf@${TAG#v}"
+            echo
+            echo "## Artifacts"
+            echo
+            echo "- \`pso-vdf-${TAG#v}.crate\` — byte-identical to the crates.io upload."
+            echo "- \`SHA256SUMS\` — SHA-256 of the above."
             echo
             echo "## CI"
             echo
@@ -373,3 +417,6 @@ jobs:
           body_path: RELEASE_BODY.md
           generate_release_notes: true
           fail_on_unmatched_files: false
+          files: |
+            dist/*.crate
+            dist/SHA256SUMS
