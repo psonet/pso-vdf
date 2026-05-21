@@ -160,6 +160,25 @@ cargo bench
 | `minroot_forward_verify/{T}`       | O(T) forward-verification baseline                     |
 | `minroot_verify_wesolowski`        | O(1) Wesolowski verification (target: under 1 ms)      |
 
+## Verifying releases
+
+Releases tagged from `v0.2.2` onward ship sigstore cosign signatures + SLSA build-provenance attestations for every artifact. See [SECURITY.md](SECURITY.md) for the threat model and the copy-pasteable verify recipe.
+
+Quick check:
+
+```sh
+TAG=v0.2.2
+ARTIFACT=pso-vdf-${TAG#v}.crate
+gh release download "$TAG" --repo psonet/pso-vdf \
+  --pattern "$ARTIFACT" --pattern "$ARTIFACT.sig" --pattern "$ARTIFACT.pem"
+cosign verify-blob \
+  --certificate "$ARTIFACT.pem" --signature "$ARTIFACT.sig" \
+  --certificate-identity-regexp \
+    '^https://github\.com/psonet/pso-vdf/\.github/workflows/ci\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "$ARTIFACT"
+```
+
 ## License
 
 Licensed under the MIT license. See [`LICENSE`](LICENSE).
