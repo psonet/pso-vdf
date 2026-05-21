@@ -23,7 +23,7 @@ Build-provenance attestations are not attached to the Release — they live in G
 The signing pipeline protects against:
 
 - **Tampered binaries on the Release page.** A re-uploaded `.crate` or `SHA256SUMS` won't verify against the original cert + sig.
-- **A compromised crates.io API token.** The same maintainer who can `cargo publish` cannot mint a sigstore signature whose Fulcio cert identity matches `https://github.com/psonet/pso-vdf/.github/workflows/ci.yml@refs/tags/vX.Y.Z`. That identity is only obtainable from inside a tag-triggered GitHub Actions run of this repo.
+- **A compromised crates.io API token.** The same maintainer who can `cargo publish` cannot mint a sigstore signature whose Fulcio cert identity matches `https://github.com/psonet/pso-vdf/.github/workflows/ci.yml@refs/heads/main` (the cog flow) or `@refs/tags/vX.Y.Z` (a manual tag-push re-release). Those identities are only obtainable from inside a GitHub Actions run of this repo's `ci.yml` workflow.
 - **A typo or mis-targeted action update** silently weakening verification. The post-publish `verify-release` job hard-fails the workflow on any bad signature; an upstream change that breaks the cosign sign-blob flow is visible immediately.
 
 It does **not** protect against:
@@ -51,7 +51,7 @@ cosign verify-blob \
   --certificate "$ARTIFACT.pem" \
   --signature   "$ARTIFACT.sig" \
   --certificate-identity-regexp \
-    '^https://github\.com/psonet/pso-vdf/\.github/workflows/ci\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+    '^https://github\.com/psonet/pso-vdf/\.github/workflows/ci\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "$ARTIFACT"
 
