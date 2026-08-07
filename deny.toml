@@ -53,7 +53,32 @@ confidence-threshold = 0.93
 multiple-versions = "deny"
 wildcards = "deny"
 deny = []
-skip = []
+skip = [
+    # syn 2 and syn 3 coexist, and the split is INSIDE arkworks — we
+    # pull neither directly and cannot resolve it from here:
+    #
+    #   syn 2 <- ark-ff-asm / ark-ff-macros / ark-serialize-derive
+    #   syn 3 <- educe -> enum-ordinalize-derive (an ark-ec/ff/poly dep)
+    #
+    # So one arkworks release requires both majors of syn at once.
+    # Checked against the ladder above before skipping: bumping does
+    # not help (0.6.0 resolves to the same pair — ark-ff-asm 0.6.0 is
+    # still on syn 2), and a [patch.crates-io] would mean carrying a
+    # fork of arkworks' proc-macro layer to satisfy a lint. Both syn
+    # versions are build-time proc-macro dependencies: nothing of
+    # either lands in the compiled artifact.
+    #
+    # This surfaced as a NIGHTLY failure on an unchanged commit —
+    # Cargo.lock is deliberately not committed for a library, so the
+    # scheduled run re-resolves and picks up ecosystem drift. syn 3.0
+    # shipping is what moved thiserror-impl and enum-ordinalize-derive
+    # across while arkworks' own macro crates stayed on 2.
+    #
+    # Revisit when arkworks moves its proc-macro layer to syn 3 — the
+    # same release that should let the RUSTSEC-2024-0436 paste ignore
+    # above go too.
+    { crate = "syn", reason = "arkworks requires syn 2 and syn 3 simultaneously; build-time only, no upstream fix available" },
+]
 
 [sources]
 unknown-registry = "deny"
