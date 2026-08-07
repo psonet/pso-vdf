@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.3 - 2026-08-07
+#### Bug Fixes
+- (**minroot**) reject the degenerate (output, proof) = (0, 0) tuple - (a2aba5d) - Anton Velichko
+#### Miscellaneous Chores
+- (**ci**) skip the syn duplicate cargo-deny cannot fix from here - (ac7b723) - Anton Velichko
+
+- - -
+
 ## v0.2.2 - 2026-05-21
 #### Bug Fixes
 - (**release**) broaden verify-release identity regex to accept refs/heads/main - (f338367) - Anton Velichko
