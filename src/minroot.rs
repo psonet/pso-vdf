@@ -31,7 +31,7 @@
 use alloc::vec::Vec;
 
 use ark_bls12_381::Fq;
-use ark_ff::{BigInt, BigInteger, Field, PrimeField};
+use ark_ff::{BigInt, BigInteger, Field, PrimeField, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use crate::{
@@ -148,6 +148,24 @@ impl Vdf for MinRootVdf {
             Ok(val) => val,
             Err(_) => return false,
         };
+
+        // Reject the zero element on either side before the check below.
+        //
+        // The Wesolowski check is `π^l · x^r == y`. `hash_to_prime` forces bit
+        // 127, so `l >= 2^127` and `π = 0` makes `π^l` exactly zero — with
+        // `y = 0` the whole check collapses to `0 == 0`, which holds for EVERY
+        // input at EVERY difficulty. 48 zero bytes is a valid compressed Fq
+        // encoding, so `deserialize_compressed` accepts it and nothing else
+        // stands in the way: `(output, proof) = (0, 0)` is a universally valid
+        // proof costing no work at all, which is the whole point of a VDF.
+        //
+        // Nothing legitimate is lost. `eval` returns `y = 0` only for `x = 0`
+        // (the fifth-root map is a permutation of Fp and fixes zero), and `π`
+        // is a power of `x`, so a zero on either side means the input itself
+        // was the zero element — for which the VDF has no delay to prove.
+        if y.is_zero() || pi.is_zero() {
+            return false;
+        }
 
         // Canonical serialisation for hash_to_prime (must match eval).
         let x_bytes = serialize_fq(&x);
@@ -412,6 +430,41 @@ mod tests {
             inner: vec![0u8; 48],
         };
         assert!(!MinRootVdf::verify(&input, &output, &proof, 0));
+    }
+
+    /// The degenerate tuple: `π = 0` zeroes `π^l` for every `l >= 1`, so with
+    /// `y = 0` the Wesolowski check reads `0 == 0` and holds for every input at
+    /// every difficulty — a valid proof at zero cost. 48 zero bytes is a valid
+    /// compressed Fq encoding, so nothing upstream filters it out.
+    ///
+    /// This is the one shape that must never verify: a caller using the VDF as
+    /// a proof-of-work admission gate has no gate at all while it does.
+    #[test]
+    fn verify_rejects_the_degenerate_zero_tuple() {
+        let zero_output = VdfOutput::from_bytes(vec![0u8; 48]);
+        let zero_proof = MinRootProof {
+            inner: vec![0u8; 48],
+        };
+        // Any input, any difficulty — including the ones a real caller uses.
+        for input in [[0x00u8; 32], [0x01u8; 32], [0xdeu8; 32], [0xffu8; 32]] {
+            let input = VdfInput::from_bytes(input);
+            for t in [1u64, 100, 1_000_000, u64::MAX] {
+                assert!(
+                    !MinRootVdf::verify(&input, &zero_output, &zero_proof, t),
+                    "zero tuple accepted at difficulty {t}"
+                );
+            }
+        }
+    }
+
+    /// ...and an honest proof still verifies, so the guard above is a filter on
+    /// the degenerate element, not on the protocol.
+    #[test]
+    fn verify_still_accepts_an_honest_proof_after_the_zero_guard() {
+        let input = VdfInput::from_bytes([0x7fu8; 32]);
+        let t = 100u64;
+        let (output, proof) = MinRootVdf::eval(&input, t);
+        assert!(MinRootVdf::verify(&input, &output, &proof, t));
     }
 
     #[test]
