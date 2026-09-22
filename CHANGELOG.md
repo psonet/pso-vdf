@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.3.0 - 2026-09-22
+#### Features
+- <span style="background-color: #d73a49; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 0.85em;">BREAKING</span>(**deps**) move to arkworks 0.6 (#6) - (dde2608) - Velichko Anton
+
+- - -
+
 ## v0.2.3 - 2026-08-07
 #### Bug Fixes
 - (**minroot**) reject the degenerate (output, proof) = (0, 0) tuple - (a2aba5d) - Anton Velichko
