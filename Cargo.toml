@@ -29,9 +29,9 @@ std     = [
 serde   = ["dep:serde", "serde/alloc"]
 
 [dependencies]
-ark-bls12-381 = { version = "0.5", default-features = false, features = ["curve"] }
-ark-ff        = { version = "0.5", default-features = false }
-ark-serialize = { version = "0.5", default-features = false }
+ark-bls12-381 = { version = "0.6", default-features = false, features = ["curve"] }
+ark-ff        = { version = "0.6", default-features = false }
+ark-serialize = { version = "0.6", default-features = false }
 sha2          = { version = "0.10", default-features = false }
 thiserror     = { version = "2", default-features = false }
 serde         = { version = "1", default-features = false, features = ["derive"], optional = true }
